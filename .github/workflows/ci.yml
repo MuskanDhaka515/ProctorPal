@@ -24,24 +24,11 @@ jobs:
       - uses: actions/checkout@v4
       - run: docker build -t proctorpal:${{ github.sha }} .
 
-  deploy:
-    # Deploys to AWS EC2 on every push to main once these repo secrets are set:
-    # EC2_HOST, EC2_USER, EC2_SSH_KEY. (The EC2 box needs Docker and the repo cloned to ~/proctorpal,
-    # with an .env file containing ANTHROPIC_API_KEY.)
+    deploy:
+    # EC2 deployment is intentionally disabled until a production
+    # environment and repository secrets are configured.
     needs: docker-build
-    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    if: ${{ false }}
     runs-on: ubuntu-latest
     steps:
-      - name: Deploy over SSH
-        uses: appleboy/ssh-action@v1.0.3
-        with:
-          host: ${{ secrets.EC2_HOST }}
-          username: ${{ secrets.EC2_USER }}
-          key: ${{ secrets.EC2_SSH_KEY }}
-          script: |
-            cd ~/proctorpal
-            git pull origin main
-            docker build -t proctorpal .
-            docker rm -f proctorpal || true
-            docker run -d --name proctorpal --restart unless-stopped \
-              --env-file .env -p 80:8000 -v proctorpal-data:/app/data proctorpal
+      - run: echo "Deployment not configured yet."
