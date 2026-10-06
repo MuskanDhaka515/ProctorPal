@@ -9,16 +9,12 @@ I wanted to build something that could handle these routine requests through a n
 ProctorPal can answer policy questions, check available exam slots, create and cancel bookings, and escalate a conversation when staff assistance is needed.
 
 ## How it works
+### Architecture
 
-```mermaid
-flowchart LR
-    A[Browser mic] -->|audio| B[Faster-Whisper]
-    B -->|transcript| C[Claude agent]
-    C <-->|tool calls| D[Agent tools]
-    D --> E[(SQLite bookings)]
-    D --> F[Policy FAQ retrieval]
-    C -->|reply| G[Browser text-to-speech]
-```
+**Browser / Microphone** → **Faster-Whisper** → **LLM Agent** → **Agent Tools** → **SQLite / Policy Search**
+
+The agent's final response is returned to the browser and can be spoken using the browser's text-to-speech functionality.
+
 
 The basic flow is:
 
@@ -182,13 +178,21 @@ These tests use a fake LLM client where appropriate, so they can test the applic
 
 ## Agent evaluation
 
-I also added a separate evaluation script with 10 scripted conversations against the real agent.
+I also created a separate evaluation suite with 10 scripted conversations that run against the real agent.
 
 ```bash
 python eval/run_eval.py
 ```
 
-This is separate from the unit/API test suite and requires access to the Anthropic API.
+Current result:
+
+```text
+9/10 scenarios passed
+```
+
+The scenarios cover policy questions, availability, booking, cancellation, escalation, and off-topic requests.
+
+This evaluation uses the real Claude API and is separate from the unit/API test suite.
 
 ## Docker
 
@@ -218,13 +222,8 @@ The project includes a GitHub Actions workflow for testing and Docker-based depl
 
 The intended deployment flow is:
 
-```mermaid
-flowchart LR
-    A[Push to main] --> B[GitHub Actions]
-    B --> C[Run tests]
-    C --> D[Build Docker image]
-    D --> E[AWS EC2]
-```
+**Push to `main`** → **GitHub Actions** → **Run tests** → **Build Docker image** → **AWS EC2 deployment**
+
 
 For EC2 deployment, the repository expects GitHub secrets for:
 
@@ -248,7 +247,7 @@ This was also a useful reminder of why I like keeping the different parts of the
 
 The policies in `data/faq.md` are sample data for a fictional testing center. They can be replaced with another organization's policies without changing the overall agent architecture.
 
-The project is designed as a prototype and learning project rather than a production university system.
+ProctorPal is currently a functional prototype and is not connected to Rowan University's production systems or student data.
 
 ## What I want to add next
 
