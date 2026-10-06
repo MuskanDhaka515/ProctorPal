@@ -1,0 +1,244 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ProctorPal · Testing Center Voice Assistant</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:wght@400;700&display=swap">
+<style>
+  :root {
+    --paper: #F6F7F9; --card: #FFFFFF; --ink: #1E2430; --graphite: #5B6472;
+    --line: #D5DAE1; --pencil: #F2B705; --pencil-deep: #B98A00; --ok: #2F7D4F; --err: #B3261E;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--paper); color: var(--ink);
+         font-family: "Atkinson Hyperlegible", system-ui, sans-serif; font-size: 17px; line-height: 1.5; }
+  header { padding: 28px 32px 8px; max-width: 1180px; margin: 0 auto; }
+  h1 { font-size: 30px; margin: 0; letter-spacing: -0.01em; }
+  header p { margin: 4px 0 0; color: var(--graphite); }
+  main { max-width: 1180px; margin: 0 auto; padding: 16px 32px 40px;
+         display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr); gap: 24px; }
+  section { background: var(--card); border: 1px solid var(--line); border-radius: 10px; }
+  h2 { font-size: 17px; margin: 0; padding: 14px 18px; border-bottom: 1px solid var(--line); }
+
+  #talk { display: flex; flex-direction: column; min-height: 620px; }
+  #log { flex: 1; overflow-y: auto; padding: 18px; display: flex; flex-direction: column; gap: 12px; max-height: 470px; }
+  .msg { max-width: 82%; padding: 10px 14px; border-radius: 12px; }
+  .user { align-self: flex-end; background: var(--ink); color: #fff; border-bottom-right-radius: 4px; }
+  .bot { align-self: flex-start; background: var(--paper); border: 1px solid var(--line); border-bottom-left-radius: 4px; }
+  .meta { font-size: 13px; color: var(--graphite); margin-top: 2px; }
+  .empty { color: var(--graphite); margin: auto; text-align: center; max-width: 34ch; }
+
+  .controls { border-top: 1px solid var(--line); padding: 18px; display: flex; align-items: center; gap: 18px; }
+  /* The mic is an answer bubble that fills in while it listens. */
+  #mic { width: 84px; height: 84px; flex: none; border-radius: 50%; cursor: pointer;
+         border: 4px solid var(--ink); background: var(--card);
+         display: grid; place-items: center; transition: background .2s, border-color .2s; }
+  #mic svg { width: 32px; height: 32px; }
+  #mic.listening { background: var(--pencil); border-color: var(--pencil-deep); animation: pulse 1.2s ease-in-out infinite; }
+  #mic.busy { opacity: .55; cursor: progress; }
+  @keyframes pulse { 50% { box-shadow: 0 0 0 10px rgba(242,183,5,.25); } }
+  #status { font-weight: 700; }
+  .typed { display: flex; gap: 8px; flex: 1; }
+  .typed input { flex: 1; font: inherit; padding: 10px 12px; border: 1px solid var(--line); border-radius: 8px; }
+  button.plain { font: inherit; padding: 10px 14px; border-radius: 8px; border: 1px solid var(--ink);
+                 background: var(--ink); color: #fff; cursor: pointer; }
+  button.quiet { background: var(--card); color: var(--ink); }
+  :focus-visible { outline: 3px solid var(--pencil-deep); outline-offset: 2px; }
+
+  aside { display: flex; flex-direction: column; gap: 24px; }
+  #events { padding: 12px 18px; max-height: 300px; overflow-y: auto; font-size: 15px; }
+  .event { padding: 8px 0; border-bottom: 1px dashed var(--line); }
+  .event:last-child { border-bottom: none; }
+  .event b { color: var(--ink); }
+  .event code { display: block; color: var(--graphite); font-size: 13px; white-space: pre-wrap; word-break: break-word; }
+  .event.fail b { color: var(--err); }
+  table { width: 100%; border-collapse: collapse; font-size: 15px; }
+  th, td { text-align: left; padding: 8px 18px; border-bottom: 1px solid var(--line); }
+  th { color: var(--graphite); font-weight: 400; }
+  .cancelled td { color: var(--graphite); text-decoration: line-through; }
+  .settings { display: flex; gap: 10px; padding: 0 18px 14px; }
+
+  @media (max-width: 860px) { main { grid-template-columns: 1fr; padding: 12px 16px 32px; } header { padding: 20px 16px 4px; } }
+  @media (prefers-reduced-motion: reduce) { #mic.listening { animation: none; } }
+</style>
+</head>
+<body>
+<header>
+  <h1>ProctorPal</h1>
+  <p>Ask about testing center hours and rules, or book an exam, by voice.</p>
+</header>
+<main>
+  <section id="talk" aria-label="Conversation">
+    <h2>Conversation</h2>
+    <div id="log" aria-live="polite">
+      <p class="empty" id="empty">Press the mic and try “What ID do I need?” or “Book my Statistics exam for next Tuesday.”</p>
+    </div>
+    <div class="controls">
+      <button id="mic" aria-label="Start talking">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="9" y="2" width="6" height="12" rx="3"/><path d="M5 10a7 7 0 0 0 14 0M12 17v5"/></svg>
+      </button>
+      <div style="flex:1; display:flex; flex-direction:column; gap:10px;">
+        <span id="status">Ready</span>
+        <form class="typed" id="typed">
+          <label for="text" class="sr" style="position:absolute;left:-9999px">Type a message</label>
+          <input id="text" placeholder="Or type a message" autocomplete="off">
+          <button class="plain" type="submit">Send</button>
+        </form>
+      </div>
+    </div>
+    <div class="settings">
+      <button class="plain quiet" id="voiceToggle" aria-pressed="true">Voice replies on</button>
+      <button class="plain quiet" id="reset">Start new conversation</button>
+    </div>
+  </section>
+
+  <aside>
+    <section aria-label="Agent activity">
+      <h2>What the agent did</h2>
+      <div id="events"><p class="meta">Tool calls show up here as the agent works.</p></div>
+    </section>
+    <section aria-label="Bookings">
+      <h2>Bookings</h2>
+      <table><thead><tr><th>Code</th><th>Student</th><th>Course</th><th>Slot</th></tr></thead>
+        <tbody id="bookings"><tr><td colspan="4" class="meta">No bookings yet.</td></tr></tbody></table>
+    </section>
+  </aside>
+</main>
+
+<script>
+const $ = (id) => document.getElementById(id);
+let sessionId = crypto.randomUUID();
+let recorder = null, chunks = [], busy = false, speakReplies = true;
+
+function setStatus(text) { $("status").textContent = text; }
+
+function addMessage(text, who, meta) {
+  $("empty")?.remove();
+  const div = document.createElement("div");
+  div.className = `msg ${who}`;
+  div.textContent = text;
+  if (meta) { const m = document.createElement("div"); m.className = "meta"; m.textContent = meta; div.appendChild(m); }
+  $("log").appendChild(div);
+  $("log").scrollTop = $("log").scrollHeight;
+}
+
+function showEvents(events) {
+  if (!events.length) return;
+  const box = $("events");
+  if (box.querySelector("p.meta")) box.innerHTML = "";
+  for (const e of events) {
+    const div = document.createElement("div");
+    const failed = e.output && e.output.ok === false;
+    div.className = "event" + (failed ? " fail" : "");
+    div.innerHTML = `<b></b><code></code>`;
+    div.querySelector("b").textContent = e.tool + (failed ? " (error)" : "");
+    div.querySelector("code").textContent = JSON.stringify(e.input);
+    box.prepend(div);
+  }
+}
+
+async function refreshBookings() {
+  const res = await fetch("/api/bookings");
+  const { bookings } = await res.json();
+  const body = $("bookings");
+  if (!bookings.length) { body.innerHTML = `<tr><td colspan="4" class="meta">No bookings yet.</td></tr>`; return; }
+  body.innerHTML = "";
+  for (const b of bookings) {
+    const tr = document.createElement("tr");
+    if (b.status === "cancelled") tr.className = "cancelled";
+    for (const v of [b.code, b.student_name, b.course, `${b.exam_date} ${b.start_time}`]) {
+      const td = document.createElement("td"); td.textContent = v; tr.appendChild(td);
+    }
+    body.appendChild(tr);
+  }
+}
+
+function speak(text) {
+  if (!speakReplies || !("speechSynthesis" in window)) return;
+  speechSynthesis.cancel();
+  const u = new SpeechSynthesisUtterance(text);
+  const voice = speechSynthesis.getVoices().find(v => v.lang.startsWith("en") && /natural|google|samantha/i.test(v.name));
+  if (voice) u.voice = voice;
+  u.rate = 1.03;
+  speechSynthesis.speak(u);
+}
+
+async function sendMessage(text, sttMs) {
+  addMessage(text, "user", sttMs ? `Transcribed in ${(sttMs/1000).toFixed(1)}s` : null);
+  setStatus("Thinking…");
+  try {
+    const res = await fetch("/api/chat", { method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ session_id: sessionId, message: text }) });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || "The server returned an error.");
+    addMessage(data.reply, "bot", `Answered in ${(data.latency_ms/1000).toFixed(1)}s`);
+    showEvents(data.tool_calls);
+    speak(data.reply);
+    if (data.tool_calls.some(e => ["book_slot", "cancel_booking"].includes(e.tool))) refreshBookings();
+    setStatus("Ready");
+  } catch (err) { setStatus(err.message); }
+}
+
+async function startRecording() {
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    recorder = new MediaRecorder(stream);
+    chunks = [];
+    recorder.ondataavailable = (e) => chunks.push(e.data);
+    recorder.onstop = async () => {
+      stream.getTracks().forEach(t => t.stop());
+      $("mic").classList.remove("listening"); $("mic").classList.add("busy"); busy = true;
+      setStatus("Transcribing…");
+      try {
+        const form = new FormData();
+        form.append("audio", new Blob(chunks, { type: recorder.mimeType }), "speech.webm");
+        const res = await fetch("/api/transcribe", { method: "POST", body: form });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || "Transcription failed.");
+        if (!data.text) setStatus("No speech heard. Press the mic and try again.");
+        else await sendMessage(data.text, data.latency_ms);
+      } catch (err) { setStatus(err.message); }
+      $("mic").classList.remove("busy"); busy = false;
+    };
+    speechSynthesis?.cancel();
+    recorder.start();
+    $("mic").classList.add("listening");
+    $("mic").setAttribute("aria-label", "Stop talking");
+    setStatus("Listening… press again when you're done");
+  } catch { setStatus("Microphone access was blocked. Allow it in your browser settings, or type instead."); }
+}
+
+$("mic").onclick = () => {
+  if (busy) return;
+  if (recorder && recorder.state === "recording") { recorder.stop(); $("mic").setAttribute("aria-label", "Start talking"); }
+  else startRecording();
+};
+document.addEventListener("keydown", (e) => {
+  if (e.code === "Space" && document.activeElement !== $("text") && document.activeElement.tagName !== "BUTTON") {
+    e.preventDefault(); $("mic").click();
+  }
+});
+$("typed").onsubmit = (e) => {
+  e.preventDefault();
+  const text = $("text").value.trim();
+  if (text) { $("text").value = ""; sendMessage(text); }
+};
+$("voiceToggle").onclick = () => {
+  speakReplies = !speakReplies;
+  $("voiceToggle").textContent = speakReplies ? "Voice replies on" : "Voice replies off";
+  $("voiceToggle").setAttribute("aria-pressed", String(speakReplies));
+  if (!speakReplies) speechSynthesis?.cancel();
+};
+$("reset").onclick = async () => {
+  await fetch("/api/reset", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ session_id: sessionId }) });
+  sessionId = crypto.randomUUID();
+  $("log").innerHTML = `<p class="empty" id="empty">New conversation. Press the mic to start.</p>`;
+  $("events").innerHTML = `<p class="meta">Tool calls show up here as the agent works.</p>`;
+  setStatus("Ready");
+};
+refreshBookings();
+</script>
+</body>
+</html>
