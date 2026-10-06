@@ -1,86 +1,268 @@
-# ProctorPal: a voice AI agent for a campus testing center
+# ProctorPal
 
-ProctorPal answers student questions by voice and books, checks, and cancels exam slots end to end. It handles the repetitive front-desk requests that take staff time (hours, ID rules, make-up exams, bookings) and hands off to a human when it should.
+ProctorPal is a voice-based AI assistant I built for a university testing center.
+
+The idea came from my experience working in Testing Services at Rowan University. Students often have similar questions about testing hours, ID requirements, make-up exams, available appointments, cancellations, and other testing procedures.
+
+I wanted to build something that could handle these routine requests through a natural voice conversation, while still keeping important booking rules controlled by the application rather than by the LLM.
+
+ProctorPal can answer policy questions, check available exam slots, create and cancel bookings, and escalate a conversation when staff assistance is needed.
 
 ## How it works
 
 ```mermaid
 flowchart LR
-    A[Browser mic] -->|audio| B[Whisper speech-to-text]
-    B -->|transcript| C[Claude LLM agent]
-    C <-->|tool calls| D[Tools]
+    A[Browser mic] -->|audio| B[Faster-Whisper]
+    B -->|transcript| C[Claude agent]
+    C <-->|tool calls| D[Agent tools]
     D --> E[(SQLite bookings)]
     D --> F[Policy FAQ retrieval]
-    C -->|reply text| G[Text-to-speech in browser]
+    C -->|reply| G[Browser text-to-speech]
 ```
 
-1. **Speech-to-text:** the browser records audio and the Flask backend transcribes it with Whisper (`faster-whisper`, running locally on CPU).
-2. **LLM agent with tool use:** Claude decides when to look something up or take an action, using five tools: `search_policies`, `check_availability`, `book_slot`, `cancel_booking`, and `escalate_to_staff`.
-3. **Retrieval-augmented generation:** policy answers come from a TF-IDF search over `data/faq.md`, so the agent answers from real policy text instead of guessing.
-4. **Business rules in code, not the prompt:** 24-hour notice, 30-day window, Sunday closures, slot capacity, and duplicate bookings are enforced in `tools.py`, so the LLM can't book an invalid slot.
-5. **Text-to-speech:** replies are spoken back with the browser's speech synthesis.
-6. **Deployment:** Flask + Gunicorn in Docker, deployed on AWS EC2 by a GitHub Actions CI/CD pipeline that runs the tests first.
+The basic flow is:
 
-The web interface shows the live conversation, every tool call the agent makes, and the bookings table updating in real time.
+1. **Speech-to-text** — The browser records the student's voice and sends the audio to the Flask backend. Faster-Whisper converts it into text.
+
+2. **Agent reasoning** — Claude processes the conversation and decides whether it can answer directly or needs to use one of the available tools.
+
+3. **Tool calling** — The agent currently has five tools:
+   - `search_policies`
+   - `check_availability`
+   - `book_slot`
+   - `cancel_booking`
+   - `escalate_to_staff`
+
+4. **Policy retrieval** — Testing-center information is stored in `data/faq.md`. I use TF-IDF retrieval to find relevant policy information when students ask questions about things like hours or ID requirements.
+
+5. **Booking validation** — Booking restrictions are checked in Python rather than relying only on the model. This includes the 24-hour notice requirement, 30-day booking window, Sunday closure, slot capacity, and duplicate-booking checks.
+
+6. **Voice response** — The final response can be spoken back to the student using the browser's speech synthesis.
+
+The interface also shows the tool calls being made and updates the bookings table during the conversation. I found this especially useful while testing and debugging the agent.
+
+## Example conversations
+
+Some requests ProctorPal can handle:
+
+> "What ID do I need for my exam?"
+
+> "What are the testing center hours on Friday?"
+
+> "Do you have anything available next Tuesday afternoon?"
+
+> "Book my Statistics make-up exam for 2 PM."
+
+> "I need to cancel my booking."
+
+> "I need to speak with someone from the testing center."
+
+The booking tools also reject requests that break the configured rules, such as trying to schedule an exam on Sunday.
 
 ## Project structure
 
 | File | Purpose |
-|---|---|
-| `app.py` | Flask API: `/api/transcribe`, `/api/chat`, `/api/bookings`, `/health` |
-| `agent.py` | Agent loop and system prompt tuned for spoken replies |
-| `tools.py` | Tool functions, schemas, and booking rules |
-| `knowledge.py` | Policy retrieval |
-| `stt.py` | Whisper speech-to-text |
-| `db.py` | SQLite storage |
-| `templates/index.html` | Voice interface |
-| `tests/` | 13 unit and API tests (no API key needed) |
-| `eval/run_eval.py` | 10 scripted conversations against the real agent, with a pass rate |
+| --- | --- |
+| `app.py` | Flask application and API endpoints |
+| `agent.py` | Claude agent, conversation loop, and tool calling |
+| `tools.py` | Agent tools and booking validation |
+| `knowledge.py` | Policy/FAQ retrieval |
+| `stt.py` | Faster-Whisper speech-to-text |
+| `db.py` | SQLite booking storage |
+| `templates/index.html` | Voice and chat interface |
+| `data/faq.md` | Sample testing-center policy information |
+| `tests/` | Unit and API tests |
+| `eval/run_eval.py` | Scripted conversation evaluation |
+| `Dockerfile` | Container configuration |
+| `.github/workflows/ci.yml` | CI/CD workflow |
 
-## Run it locally
+## Tech stack
 
-Requires Python 3.11+ and an Anthropic API key.
+| Area | Technology |
+| --- | --- |
+| Backend | Python, Flask |
+| LLM | Claude API |
+| Speech-to-text | Faster-Whisper |
+| Retrieval | TF-IDF, scikit-learn |
+| Database | SQLite |
+| Voice output | Browser Speech Synthesis API |
+| Testing | Pytest |
+| Containerization | Docker |
+| CI/CD | GitHub Actions |
+| Deployment setup | AWS EC2 |
+
+## Running locally
+
+### 1. Clone the repository
 
 ```bash
-git clone https://github.com/MuskanDhaka515/proctorpal.git
-cd proctorpal
-python -m venv .venv && source .venv/bin/activate   # Windows: .venv\Scripts\activate
+git clone https://github.com/MuskanDhaka515/ProctorPal.git
+cd ProctorPal
+```
+
+### 2. Create a virtual environment
+
+```bash
+python -m venv .venv
+```
+
+Windows:
+
+```bash
+.venv\Scripts\activate
+```
+
+macOS/Linux:
+
+```bash
+source .venv/bin/activate
+```
+
+### 3. Install the dependencies
+
+```bash
 pip install -r requirements.txt
-export ANTHROPIC_API_KEY=your-key-here                # Windows: set ANTHROPIC_API_KEY=...
+```
+
+### 4. Configure the API key
+
+Copy `.env.example` to a new file named `.env`.
+
+Then add your Anthropic API key:
+
+```text
+ANTHROPIC_API_KEY=your-key-here
+```
+
+The `.env` file is excluded from Git and should never be committed.
+
+### 5. Start ProctorPal
+
+```bash
 python app.py
 ```
 
-Open http://localhost:8000 in Chrome or Edge, allow the microphone, and press the mic button (or the space bar). The first voice request downloads the Whisper model, which takes about a minute once.
+Open:
 
-## Run with Docker
+```text
+http://localhost:8000
+```
+
+Chrome or Edge works best for the voice interface.
+
+The first voice request can take longer because the Faster-Whisper model may need to be downloaded.
+
+## Testing
+
+I wrote automated tests for the main parts of the application, including:
+
+- agent tool calling
+- Flask API endpoints
+- policy search
+- availability checking
+- booking and capacity rules
+- duplicate-booking prevention
+- invalid time validation
+- cancellation
+- unknown or invalid tool requests
+
+Run the tests with:
+
+```bash
+pytest -v
+```
+
+Current local test result:
+
+```text
+13 passed
+```
+
+These tests use a fake LLM client where appropriate, so they can test the application logic without making an Anthropic API request.
+
+## Agent evaluation
+
+I also added a separate evaluation script with 10 scripted conversations against the real agent.
+
+```bash
+python eval/run_eval.py
+```
+
+This is separate from the unit/API test suite and requires access to the Anthropic API.
+
+## Docker
+
+Build the image:
 
 ```bash
 docker build -t proctorpal .
-docker run -p 8000:8000 -e ANTHROPIC_API_KEY=your-key-here proctorpal
 ```
 
-## Tests and evaluation
+Run it:
 
 ```bash
-pytest -q                     # unit + API tests with a fake LLM
-python eval/run_eval.py       # real conversations; prints "Result: X/10 scenarios passed"
+docker run -p 8000:8000 \
+  -e ANTHROPIC_API_KEY=your-key-here \
+  proctorpal
 ```
 
-## Deploy to AWS EC2
+Then open:
 
-1. Launch an Ubuntu EC2 instance (t3.small or larger), open ports 22 and 80, and install Docker.
-2. Clone this repo to `~/proctorpal` on the instance and create `~/proctorpal/.env` with `ANTHROPIC_API_KEY=...`.
-3. In GitHub, add repository secrets `EC2_HOST`, `EC2_USER`, and `EC2_SSH_KEY`.
-4. Push to `main`. GitHub Actions runs the tests, builds the image, and redeploys the container.
+```text
+http://localhost:8000
+```
 
-Browsers only allow microphone access on HTTPS or localhost, so for a public demo put the instance behind HTTPS (for example with Caddy or an AWS load balancer and certificate).
+## Deployment setup
+
+The project includes a GitHub Actions workflow for testing and Docker-based deployment to AWS EC2.
+
+The intended deployment flow is:
+
+```mermaid
+flowchart LR
+    A[Push to main] --> B[GitHub Actions]
+    B --> C[Run tests]
+    C --> D[Build Docker image]
+    D --> E[AWS EC2]
+```
+
+For EC2 deployment, the repository expects GitHub secrets for:
+
+- `EC2_HOST`
+- `EC2_USER`
+- `EC2_SSH_KEY`
+
+For a public voice demo, HTTPS is also required because browsers restrict microphone access on non-secure remote pages.
+
+## A problem I ran into
+
+While testing the voice workflow, transcription was failing even though the rest of the application was working.
+
+I used the Flask logs to isolate the failure to the speech-to-text layer and found a compatibility issue between Faster-Whisper and the installed PyAV version.
+
+Pinning the compatible PyAV dependency fixed the issue. I added that version to `requirements.txt` so a fresh installation uses the same working environment.
+
+This was also a useful reminder of why I like keeping the different parts of the agent modular — it makes problems much easier to isolate.
 
 ## Notes
 
-The policy FAQ is sample data for a fictional testing center. Swap in your own `data/faq.md` to adapt the agent to another front desk.
+The policies in `data/faq.md` are sample data for a fictional testing center. They can be replaced with another organization's policies without changing the overall agent architecture.
 
-## Next steps
+The project is designed as a prototype and learning project rather than a production university system.
 
-- Phone calls through Twilio Voice
-- Streaming responses to cut latency
-- Calendar integration for staff schedules
+## What I want to add next
+
+- Twilio Voice integration for real phone calls
+- streaming transcription and responses
+- calendar integration
+- conversation analytics and monitoring
+- more evaluation scenarios
+- improved staff handoff workflow
+
+## What I learned
+
+The main thing I learned from this project is that building a useful AI agent involves more than getting an LLM to generate a good response.
+
+The model needs clear tools, the application needs its own validation rules, and each part of the workflow needs to be observable enough to troubleshoot when something goes wrong.
+
+That is the part of AI automation I enjoy most: connecting the model to real actions while keeping the workflow reliable and understandable.

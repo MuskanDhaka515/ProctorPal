@@ -6,8 +6,11 @@ Use the printed score as your real result (e.g. "handled 9 of 10 test conversati
 """
 import os
 import sys
+from dotenv import load_dotenv
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+load_dotenv()
 os.environ["PROCTORPAL_DB"] = "data/eval.db"
 if os.path.exists("data/eval.db"):
     os.remove("data/eval.db")
